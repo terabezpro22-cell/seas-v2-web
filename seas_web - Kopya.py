@@ -7,26 +7,31 @@ from streamlit_mic_recorder import mic_recorder
 import PIL.Image
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="SEAS V2 - Gemini Edition", layout="centered")
+st.set_page_config(page_title="SEAS V2 - Kesin Çözüm", layout="centered")
 
 # API Bağlantıları
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-    vision_model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # HATA ÇÖZÜMÜ: Model ismini tam yol olarak tanımlıyoruz
+    # Eğer 'gemini-1.5-flash' çalışmazsa 'models/gemini-1.5-flash' deneyecek
+    try:
+        vision_model = genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        vision_model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
 except Exception as e:
-    st.error(f"API Anahtarları eksik veya hatalı: {e}")
+    st.error(f"API Bağlantı Hatası: {e}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title("🎙️👁️ SEAS V2: Hibrit Güç")
+st.title("🎙️👁️ SEAS V2: Tam Operasyon")
 
 with st.sidebar:
     st.header("🖼️ Görsel Analiz")
     uploaded_file = st.file_uploader("Resim yükle...", type=['png', 'jpg', 'jpeg'])
-    if uploaded_file:
-        st.image(uploaded_file, caption="Görsel Hazır!", use_container_width=True)
     if st.button("Sohbeti Sıfırla"):
         st.session_state.messages = []
         st.rerun()
@@ -61,26 +66,28 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             if uploaded_file:
-                # --- GEMINI VISION (Görsel İşleme) ---
+                # --- GEMINI GÖRSEL İŞLEME ---
                 img = PIL.Image.open(uploaded_file)
+                # Yeni modellerde generate_content kullanımı bazen model ismine göre değişir
                 response = vision_model.generate_content([prompt, img])
                 cevap = response.text
             else:
-                # --- GROQ LLAMA (Hızlı Metin Sohbeti) ---
+                # --- GROQ METİN SOHBETİ ---
                 response = groq_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[{"role": "system", "content": "Sen samimi, zeki bir asistansın."}, {"role": "user", "content": prompt}]
+                    messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
                 )
                 cevap = response.choices[0].message.content
             
             st.markdown(cevap)
             st.session_state.messages.append({"role": "assistant", "content": cevap})
             
-            # SESLENDİRME (Vıdı vıdı)
+            # SESLENDİRME
             tts = gTTS(text=cevap[:350], lang='tr')
             audio_fp = BytesIO()
             tts.write_to_fp(audio_fp)
             st.audio(audio_fp, format='audio/mp3', autoplay=True)
             
         except Exception as e:
-            st.error(f"Hata oluştu kanka: {e}")
+            st.error(f"Kanka şöyle bir hata çıktı: {e}")
+            st.info("İpucu: Eğer model bulunamadı diyorsa API anahtarının aktifleşmesi 1-2 dakika sürebilir.")
