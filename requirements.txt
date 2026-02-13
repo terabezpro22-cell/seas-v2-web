@@ -3,3 +3,9 @@ groq
 gTTS
 streamlit-mic-recorder
 Pillow
+streamlit
+google-generativeai
+groq
+gtts
+streamlit-mic-recorder
+pillow
