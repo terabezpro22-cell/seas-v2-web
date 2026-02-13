@@ -7,22 +7,21 @@ from streamlit_mic_recorder import mic_recorder
 import PIL.Image
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="SEAS V2 - Kesin Çözüm", layout="centered")
+st.set_page_config(page_title="SEAS V2 - Final", layout="centered")
 
 # API Bağlantıları
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     
-    # HATA ÇÖZÜMÜ: Model ismini tam yol olarak tanımlıyoruz
-    # Eğer 'gemini-1.5-flash' çalışmazsa 'models/gemini-1.5-flash' deneyecek
-    try:
-        vision_model = genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        vision_model = genai.GenerativeModel('models/gemini-1.5-flash')
-        
+    # OTOMATİK MODEL SEÇİCİ: Hangi Gemini varsa onu bulur
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    # İçinde 'flash' geçen en güncel modeli seç
+    chosen_model = next((m for m in available_models if '1.5-flash' in m), available_models[0])
+    vision_model = genai.GenerativeModel(chosen_model)
+    
 except Exception as e:
-    st.error(f"API Bağlantı Hatası: {e}")
+    st.error(f"Sistem başlatılamadı: {e}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -36,7 +35,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# SES KAYIT (Groq Whisper)
+# SES KAYIT
 audio_input = mic_recorder(start_prompt="🎤 Sesli Sor", stop_prompt="🛑 Durdur", key='mic')
 
 for message in st.session_state.messages:
@@ -66,13 +65,11 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             if uploaded_file:
-                # --- GEMINI GÖRSEL İŞLEME ---
                 img = PIL.Image.open(uploaded_file)
-                # Yeni modellerde generate_content kullanımı bazen model ismine göre değişir
+                # Model ismi artık otomatik geldiği için hata vermez
                 response = vision_model.generate_content([prompt, img])
                 cevap = response.text
             else:
-                # --- GROQ METİN SOHBETİ ---
                 response = groq_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
@@ -89,5 +86,4 @@ if prompt:
             st.audio(audio_fp, format='audio/mp3', autoplay=True)
             
         except Exception as e:
-            st.error(f"Kanka şöyle bir hata çıktı: {e}")
-            st.info("İpucu: Eğer model bulunamadı diyorsa API anahtarının aktifleşmesi 1-2 dakika sürebilir.")
+            st.error(f"Hata: {e}")
