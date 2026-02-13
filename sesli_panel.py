@@ -14,25 +14,26 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title("🎙️👁️ SEAS V2: Tam Operasyon")
+st.title("🎙️👁️ SEAS V2: Kesin Çözüm")
 
 def encode_image(image_file):
     image_file.seek(0)
     return base64.b64encode(image_file.read()).decode('utf-8')
 
+# --- YAN PANEL ---
 with st.sidebar:
-    st.header("🖼️ Görsel Analiz")
-    uploaded_file = st.file_uploader("Soru veya Resim Yükle", type=['png', 'jpg', 'jpeg'])
+    st.header("🖼️ Görsel Yükle")
+    uploaded_file = st.file_uploader("Soru veya Resim seç...", type=['png', 'jpg', 'jpeg'])
     if uploaded_file:
-        st.image(uploaded_file, caption="Görsel Hazır!", use_container_width=True)
-    if st.button("Sohbeti Temizle"):
+        st.image(uploaded_file, caption="Görsel yüklendi!", use_container_width=True)
+    if st.button("Sohbeti Sıfırla"):
         st.session_state.messages = []
         st.rerun()
 
-# SES KAYIT
+# --- SES KAYIT ---
 audio_input = mic_recorder(start_prompt="🎤 Sesli Sor", stop_prompt="🛑 Durdur", key='mic')
 
-# Geçmişi Yazdır
+# Mesaj Geçmişini Göster
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -41,8 +42,11 @@ prompt = ""
 if audio_input:
     audio_bio = BytesIO(audio_input['bytes'])
     audio_bio.name = "audio.wav"
-    transcription = client.audio.transcriptions.create(file=audio_bio, model="whisper-large-v3", language="tr")
-    prompt = transcription.text
+    try:
+        transcription = client.audio.transcriptions.create(file=audio_bio, model="whisper-large-v3", language="tr")
+        prompt = transcription.text
+    except Exception as e:
+        st.error(f"Ses okuma hatası: {e}")
 
 text_input = st.chat_input("Mesajını yaz...")
 if text_input: prompt = text_input
@@ -57,15 +61,16 @@ if prompt:
             if uploaded_file:
                 base64_image = encode_image(uploaded_file)
                 
-                # --- SIRA SIRA MODELLERİ DENEYELİM ---
-                # Groq hangisini açtıysa o çalışacak
+                # SIRA SIRA DENENECEK MODELLER (Groq'un güncel listesi)
                 models_to_try = [
                     "llama-3.2-11b-vision-preview",
                     "llama-3.2-90b-vision-preview",
-                    "llava-v1.5-7b-4096-preview" # Bu genelde hiç bakıma girmez
+                    "llava-v1.5-7b-4096-preview"
                 ]
                 
                 response = None
+                errors = []
+                
                 for model_name in models_to_try:
                     try:
                         response = client.chat.completions.create(
@@ -78,14 +83,17 @@ if prompt:
                                 ]
                             }]
                         )
-                        break 
-                    except:
+                        if response: break 
+                    except Exception as e:
+                        errors.append(f"{model_name}: {str(e)}")
                         continue
                 
                 if not response:
-                    st.error("Kanka Groq'un tüm vision sistemleri şu an kapalı. Sadece metinle devam edebiliriz.")
+                    st.error("⚠️ Groq Görsel Modellerine Ulaşılamıyor!")
+                    for err in errors: st.warning(err)
                     st.stop()
             else:
+                # Normal metin/ses sohbeti
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
@@ -95,11 +103,11 @@ if prompt:
             st.markdown(cevap)
             st.session_state.messages.append({"role": "assistant", "content": cevap})
             
-            # SESLENDİRME
+            # Seslendirme (Vıdı vıdı kısmı)
             tts = gTTS(text=cevap[:350], lang='tr')
             audio_fp = BytesIO()
             tts.write_to_fp(audio_fp)
             st.audio(audio_fp, format='audio/mp3', autoplay=True)
             
         except Exception as e:
-            st.error(f"Bir hata var kanka: {e}")
+            st.error(f"Genel bir hata oluştu: {e}")
