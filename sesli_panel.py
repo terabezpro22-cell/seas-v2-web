@@ -106,7 +106,8 @@ if final_prompt:
     # Ekrana bas ve OYNAT
     with col2:
         st.success("✅ Cevap Hazır!")
-        st.audio(audio_fp, format='audio/mp3', autoplay=True)
+        st.audio(audio_fp, format='audio/mp3', autoplay=False)
         st.write(f"**Asistan Diyor Ki:** {cevap}")
     
+
     st.rerun()
