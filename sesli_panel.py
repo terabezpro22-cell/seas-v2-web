@@ -8,110 +8,88 @@ import base64
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="SEAS V2 - Vision & Voice", layout="centered")
 
-# API Bağlantısı (Secrets üzerinden)
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# API Bağlantısı
+try:
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+except:
+    st.error("API Anahtarı bulunamadı! Lütfen Secrets ayarlarını kontrol et.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title("🎙️👁️ SEAS V2: Sesli & Görsel")
+st.title("🎙️👁️ SEAS V2: Final Versiyon")
 
 # --- YARDIMCI FONKSİYONLAR ---
 def encode_image(image_file):
-    """Dosyayı base64 formatına çevirir ve imleci başa sarar."""
     image_file.seek(0)
     return base64.b64encode(image_file.read()).decode('utf-8')
 
-# --- YAN PANEL: GÖRSEL YÜKLEME ---
+# --- YAN PANEL ---
 with st.sidebar:
-    st.header("🖼️ Soru/Görsel Yükle")
-    uploaded_file = st.file_uploader("Bir resim seç veya çek...", type=['png', 'jpg', 'jpeg'])
+    st.header("🖼️ Görsel Analiz")
+    uploaded_file = st.file_uploader("Soru veya Resim Yükle", type=['png', 'jpg', 'jpeg'])
     if uploaded_file:
-        st.image(uploaded_file, caption="Yüklenen Görsel", use_container_width=True)
+        st.image(uploaded_file, caption="Yüklendi!", use_container_width=True)
     
-    if st.button("Sohbeti Temizle"):
+    if st.button("Sohbeti Sıfırla"):
         st.session_state.messages = []
         st.rerun()
 
-# --- SES KAYIT BÖLÜMÜ ---
-audio_input = mic_recorder(
-    start_prompt="🎤 Konuşarak Soru Sor",
-    stop_prompt="🛑 Bitirmek İçin Bas",
-    key='mic'
-)
+# --- SES VE METİN GİRİŞİ ---
+audio_input = mic_recorder(start_prompt="🎤 Sesli Sor", stop_prompt="🛑 Durdur", key='mic')
 
-# --- SOHBET AKIŞI ---
+# Geçmişi göster
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- İŞLEME ---
 prompt = ""
 if audio_input:
     audio_bio = BytesIO(audio_input['bytes'])
     audio_bio.name = "audio.wav"
-    try:
-        transcription = client.audio.transcriptions.create(
-            file=audio_bio,
-            model="whisper-large-v3",
-            language="tr"
-        )
-        prompt = transcription.text
-    except Exception as e:
-        st.error(f"Ses okuma hatası: {e}")
+    transcription = client.audio.transcriptions.create(file=audio_bio, model="whisper-large-v3", language="tr")
+    prompt = transcription.text
 
-text_input = st.chat_input("Veya buraya yaz...")
+text_input = st.chat_input("Buraya yaz...")
 if text_input: prompt = text_input
 
 if prompt:
-    # Kullanıcı mesajını ekrana bas ve hafızaya al
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
         try:
-            # GÖRSEL VARSA GÜNCEL VISION MODELİ (90B)
             if uploaded_file:
                 base64_image = encode_image(uploaded_file)
+                # DİKKAT: En güncel Vision modeli ismini buraya yazdım
                 response = client.chat.completions.create(
-                    model="llama-3.2-90b-vision-preview", # En güncel çalışan model
+                    model="llama-3.2-11b-vision-preview", 
                     messages=[
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": f"Görseli analiz et ve şu soruyu cevapla: {prompt}"},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                                }
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                             ]
                         }
-                    ],
-                    max_tokens=1024
+                    ]
                 )
-            # GÖRSEL YOKSA STANDART HIZLI MODEL
             else:
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": "Sen samimi bir kankasın. Soruları adım adım açıkla."},
-                        {"role": "user", "content": prompt}
-                    ]
+                    messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
                 )
             
             cevap = response.choices[0].message.content
             st.markdown(cevap)
             st.session_state.messages.append({"role": "assistant", "content": cevap})
             
-            # SESLENDİRME
-            if cevap:
-                # Seslendirme için metni temizle (markdown işaretlerini okumasın diye)
-                clean_text = cevap.replace("*", "").replace("#", "")
-                tts = gTTS(text=clean_text[:500], lang='tr') 
-                audio_fp = BytesIO()
-                tts.write_to_fp(audio_fp)
-                st.audio(audio_fp, format='audio/mp3', autoplay=True)
-                
+            # Seslendirme
+            tts = gTTS(text=cevap[:400], lang='tr')
+            audio_fp = BytesIO()
+            tts.write_to_fp(audio_fp)
+            st.audio(audio_fp, format='audio/mp3', autoplay=True)
+            
         except Exception as e:
-            st.error(f"Bir hata oluştu kanka: {e}")
+            st.error(f"Model hatası kanka: {e}. Groq yine model ismi değiştirmiş olabilir!")
