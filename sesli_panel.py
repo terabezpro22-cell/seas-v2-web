@@ -71,11 +71,11 @@ if prompt:
 
     with st.chat_message("assistant"):
         try:
-            # GÖRSEL VARSA VISION MODELİ
+            # GÖRSEL VARSA GÜNCEL VISION MODELİ (90B)
             if uploaded_file:
                 base64_image = encode_image(uploaded_file)
                 response = client.chat.completions.create(
-                    model="llama-3.2-11b-vision-preview", # Daha stabil olan 11B Vision modeli
+                    model="llama-3.2-90b-vision-preview", # En güncel çalışan model
                     messages=[
                         {
                             "role": "user",
@@ -90,7 +90,7 @@ if prompt:
                     ],
                     max_tokens=1024
                 )
-            # GÖRSEL YOKSA HIZLI MODEL
+            # GÖRSEL YOKSA STANDART HIZLI MODEL
             else:
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
@@ -104,14 +104,14 @@ if prompt:
             st.markdown(cevap)
             st.session_state.messages.append({"role": "assistant", "content": cevap})
             
-            # SESLENDİRME (Hata almamak için kısa metin kontrolü)
+            # SESLENDİRME
             if cevap:
-                tts = gTTS(text=cevap[:500], lang='tr') # Çok uzunsa ilk 500 karakteri oku
+                # Seslendirme için metni temizle (markdown işaretlerini okumasın diye)
+                clean_text = cevap.replace("*", "").replace("#", "")
+                tts = gTTS(text=clean_text[:500], lang='tr') 
                 audio_fp = BytesIO()
                 tts.write_to_fp(audio_fp)
                 st.audio(audio_fp, format='audio/mp3', autoplay=True)
                 
         except Exception as e:
             st.error(f"Bir hata oluştu kanka: {e}")
-
-# Sayfanın sürekli yenilenmesini engellemek için st.rerun() eklemiyoruz.
