@@ -70,15 +70,15 @@ if prompt:
                 response = vision_model.generate_content([prompt, img])
                 cevap = response.text
             else:
-                # GÜNCELLENEN VE GÜVENLİ HALE GETİRİLEN ALAN
+                # KÖKTEN DÜZELTİLEN YENİ MODEL ALANI
                 try:
-                    # Öncelikle en güçlü güncel Llama modeli deneniyor
+                    # Groq üzerindeki en güncel aktif model deneniyor
                     response = groq_client.chat.completions.create(
-                        model="llama-3.3-70b-specdec",
+                        model="qwen-2.5-32b",
                         messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
                     )
                 except Exception:
-                    # Eğer Groq modellerinde anlık bir problem veya güncelleme olursa otomatik yedek profile geçiyor
+                    # Alternatif hızlı Llama modeli
                     response = groq_client.chat.completions.create(
                         model="llama3-8b-8192",
                         messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
