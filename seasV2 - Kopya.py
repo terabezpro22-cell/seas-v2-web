@@ -3,24 +3,36 @@ from groq import Groq
 from gtts import gTTS
 from io import BytesIO
 from streamlit_mic_recorder import mic_recorder
-import PIL.Image
+import os
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="SEAS V2 - Sadece Groq", layout="centered")
+st.set_page_config(page_title="SEAS V2 - Final", layout="centered")
 
-# API Bağlantısı (Sadece Groq)
+# --- GITHUB SIZINTI KORUMASI ---
+if os.path.exists(".streamlit/secrets.toml"):
+    with open(".streamlit/secrets.toml", "r") as f:
+        content = f.read()
+        if "gsk_" in content and not os.path.exists(".gitignore"):
+            st.error("🚨 GÜVENLİK UYARISI: .gitignore dosyanız eksik! API anahtarınız GitHub'a sızabilir. Lütfen önce ana dizine bir .gitignore dosyası ekleyin ve içine `.streamlit/secrets.toml` yazın.")
+            st.stop()
+
+# API Bağlantısı (Gizli Arka Plan)
 try:
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except Exception as e:
-    st.error(f"Sistem başlatılamadı: {e}. Lütfen .streamlit/secrets.toml dosyasına GROQ_API_KEY anahtarını eklediğinizden emin olun.")
+    st.error(f"Sistem başlatılamadı: {e}. Lütfen yapılandırma dosyasını kontrol edin.")
+    st.stop()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title("🎙️👁️ SEAS V2: Tam Operasyon (Groq Edition)")
+# Başlık ve Sistem Bilgisi
+st.title("🎙️👁️ SEAS V2: Tam Operasyon")
+st.success("⚡ **Yapay Zeka ve Gelişmiş Dil Modelleri Aktif!**")
 
 with st.sidebar:
     st.header("🖼️ Görsel Analiz")
+    st.info("🤖 Görsel Motoru: Llama 4 Scout")
     uploaded_file = st.file_uploader("Resim yükle...", type=['png', 'jpg', 'jpeg'])
     if st.button("Sohbeti Sıfırla"):
         st.session_state.messages = []
@@ -43,9 +55,9 @@ if audio_input:
         )
         prompt = transcription.text
     except Exception as e:
-        st.error(f"Ses okuma hatası: {e}")
+        st.error(f"Ses Okuma Hatası: {e}")
 
-text_input = st.chat_input("Mesajını yaz...")
+text_input = st.chat_input("Kankana mesajını yaz...")
 if text_input: prompt = text_input
 
 if prompt:
@@ -56,31 +68,30 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             if uploaded_file:
-                # EĞER RESİM YÜKLENDİYSE: Groq'un Görme (Vision) modelini kullanıyoruz
+                # 🖼️ GÖRSEL ANALİZ MOTORU
                 try:
                     response = groq_client.chat.completions.create(
-                        model="llama-3.2-11b-vision-preview",
+                        model="meta-llama/llama-4-scout-17b-16e-instruct",
                         messages=[
-                            {"role": "system", "content": "Samimi bir kankasın. Yüklenen resmi ve mesajı analiz et."},
+                            {"role": "system", "content": "Samimi bir kankasın. Resmi ve mesajı detaylıca analiz et."},
                             {"role": "user", "content": prompt}
                         ]
                     )
                     cevap = response.choices[0].message.content
                 except Exception as vision_err:
-                    st.error(f"Görsel analiz modeli hatası: {vision_err}")
-                    cevap = "Kanka resmi analiz ederken bir sorun çıktı, kusura bakma."
+                    st.error(f"Görsel Analiz Hatası: {vision_err}")
+                    cevap = "Kanka resmi şu an analiz edemedim, modelde bir yoğunluk olabilir."
             else:
-                # SADECE METİN/SES VARSA: Normal sohbet modeli
+                # 💬 NORMAL SOHBET MOTORLARI
                 try:
                     response = groq_client.chat.completions.create(
-                        model="llama-3.3-70b-specdec",
+                        model="qwen/qwen3.6-27b",
                         messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
                     )
                     cevap = response.choices[0].message.content
                 except Exception:
-                    # Yedek hızlı model
                     response = groq_client.chat.completions.create(
-                        model="llama3-8b-8192",
+                        model="openai/gpt-oss-120b",
                         messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
                     )
                     cevap = response.choices[0].message.content
@@ -95,4 +106,4 @@ if prompt:
             st.audio(audio_fp, format='audio/mp3', autoplay=True)
             
         except Exception as e:
-            st.error(f"Hata: {e}")
+            st.error(f"İşlem Hatası: {e}")
