@@ -1,105 +1,99 @@
 import streamlit as st
-import requests
+import google.generativeai as genai
 from groq import Groq
-from PIL import Image
-from io import BytesIO
 from gtts import gTTS
+from io import BytesIO
 from streamlit_mic_recorder import mic_recorder
+import PIL.Image
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="SEAS V2 - Akıllı Asistan", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="SEAS V2 - Final", layout="centered")
 
-# CSS ile Şık Bir Görünüm
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: white; }
-    .stButton>button { width: 100%; border-radius: 20px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# API Key'i Secrets'tan Çekiyoruz (Bulut Güvenliği)
+# API Bağlantıları
 try:
-    API_KEY = st.secrets["GROQ_API_KEY"]
-    client = Groq(api_key=API_KEY)
-except Exception:
-    st.error("Kanka, Streamlit Cloud ayarlarından GROQ_API_KEY'i eklemeyi unutma!")
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    
+    # OTOMATİK MODEL SEÇİCİ: Hangi Gemini varsa onu bulur
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    # İçinde 'flash' geçen en güncel modeli seç
+    chosen_model = next((m for m in available_models if '1.5-flash' in m), available_models[0])
+    vision_model = genai.GenerativeModel(chosen_model)
+    
+except Exception as e:
+    st.error(f"Sistem başlatılamadı: {e}")
 
-st.title("🤖 SEAS V2 - Web & Sesli")
-st.caption("Kanka hoş geldin! İster yaz, ister konuş, ister resim çizdir.")
-
-# Sohbet Geçmişini Hafızada Tut
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- MİKROFON GİRİŞİ ---
-audio_input = mic_recorder(
-    start_prompt="🎤 Sesli Komut Ver",
-    stop_prompt="🛑 Durdur ve Sor",
-    key='recorder'
-)
+st.title("🎙️👁️ SEAS V2: Tam Operasyon")
 
-# Sesli girişi metne çevir (Whisper Large V3)
-user_prompt = ""
-if audio_input:
-    with st.spinner("Sesin çözülüyor..."):
-        try:
-            audio_bio = BytesIO(audio_input['bytes'])
-            audio_bio.name = "audio.wav"
-            transcription = client.audio.transcriptions.create(
-                file=audio_bio,
-                model="whisper-large-v3",
-                language="tr"
-            )
-            user_prompt = transcription.text
-        except Exception as e:
-            st.error(f"Ses anlaşılamadı kanka: {e}")
+with st.sidebar:
+    st.header("🖼️ Görsel Analiz")
+    uploaded_file = st.file_uploader("Resim yükle...", type=['png', 'jpg', 'jpeg'])
+    if st.button("Sohbeti Sıfırla"):
+        st.session_state.messages = []
+        st.rerun()
 
-# Klavye girişi
-text_input = st.chat_input("Mesajını buraya yaz kanka...")
-final_prompt = user_prompt if user_prompt else text_input
+# SES KAYIT
+audio_input = mic_recorder(start_prompt="🎤 Sesli Sor", stop_prompt="🛑 Durdur", key='mic')
 
-# Geçmiş mesajları ekrana bas (Sohbet balonları)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- ANA MOTOR (CEVAP ÜRETME) ---
-if final_prompt:
-    # Kullanıcının mesajını göster
-    st.session_state.messages.append({"role": "user", "content": final_prompt})
+prompt = ""
+if audio_input:
+    audio_bio = BytesIO(audio_input['bytes'])
+    audio_bio.name = "audio.wav"
+    try:
+        transcription = groq_client.audio.transcriptions.create(
+            file=audio_bio, model="whisper-large-v3", language="tr"
+        )
+        prompt = transcription.text
+    except Exception as e:
+        st.error(f"Ses okuma hatası: {e}")
+
+text_input = st.chat_input("Mesajını yaz...")
+if text_input: prompt = text_input
+
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(final_prompt)
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # GÖRSEL ÇİZME KOMUTU
-        if any(k in final_prompt.lower() for k in ["çiz", "resim", "görsel", "foto"]):
-            st.write("Hemen hayal ediyorum...")
-            clean_prompt = final_prompt.lower().replace("çiz", "").replace("resim", "").strip()
-            url = f"https://image.pollinations.ai/prompt/{clean_prompt.replace(' ', '%20')}?width=1024&height=1024&model=flux&nologo=true"
-            st.image(url, caption=f"İsteğin: {clean_prompt}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Resmi çizdim kanka: {clean_prompt}"})
-        
-        # NORMAL SOHBET
-        else:
-            try:
-                response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": "Sen SEAS V2'sin. Çok samimi, zeki, 'kanka' diye hitap eden bir asistansın."},
-                        {"role": "user", "content": final_prompt}
-                    ]
-                )
-                cevap = response.choices[0].message.content
-                st.markdown(cevap) # Yazılı mesajı basar
-                
-                # İSTEĞE BAĞLI SESLİ OKUMA
-                if st.button("🔊 Cevabı Sesli Dinle"):
-                    with st.spinner("Ses hazırlanıyor..."):
-                        tts = gTTS(text=cevap, lang='tr')
-                        audio_fp = BytesIO()
-                        tts.write_to_fp(audio_fp)
-                        st.audio(audio_fp, format='audio/mp3', autoplay=True)
-                
-                st.session_state.messages.append({"role": "assistant", "content": cevap})
-            except Exception as e:
-                st.error(f"Bir hata oluştu kanka: {e}")
+        try:
+            if uploaded_file:
+                img = PIL.Image.open(uploaded_file)
+                # Model ismi artık otomatik geldiği için hata vermez
+                response = vision_model.generate_content([prompt, img])
+                cevap = response.text
+            else:
+                # DÜZELTİLEN GÜVENLİ VE GÜNCEL MODEL ALANI
+                try:
+                    # En güncel Llama 3.3 modeli çağrılıyor ve indeks hatası [0] eklendi
+                    response = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-specdec",
+                        messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
+                    )
+                    cevap = response.choices[0].message.content
+                except Exception:
+                    # Ana modelde sorun çıkarsa devreye girecek olan yedek aktif model
+                    response = groq_client.chat.completions.create(
+                        model="llama3-8b-8192",
+                        messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
+                    )
+                    cevap = response.choices[0].message.content
+            
+            st.markdown(cevap)
+            st.session_state.messages.append({"role": "assistant", "content": cevap})
+            
+            # SESLENDİRME
+            tts = gTTS(text=cevap[:350], lang='tr')
+            audio_fp = BytesIO()
+            tts.write_to_fp(audio_fp)
+            st.audio(audio_fp, format='audio/mp3', autoplay=True)
+            
+        except Exception as e:
+            st.error(f"Hata: {e}")
