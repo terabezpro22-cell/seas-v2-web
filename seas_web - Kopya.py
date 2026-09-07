@@ -70,10 +70,19 @@ if prompt:
                 response = vision_model.generate_content([prompt, img])
                 cevap = response.text
             else:
-                response = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
-                )
+                # GÜNCELLENEN VE GÜVENLİ HALE GETİRİLEN ALAN
+                try:
+                    # Öncelikle en güçlü güncel Llama modeli deneniyor
+                    response = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-specdec",
+                        messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
+                    )
+                except Exception:
+                    # Eğer Groq modellerinde anlık bir problem veya güncelleme olursa otomatik yedek profile geçiyor
+                    response = groq_client.chat.completions.create(
+                        model="llama3-8b-8192",
+                        messages=[{"role": "system", "content": "Samimi bir kankasın."}, {"role": "user", "content": prompt}]
+                    )
                 cevap = response.choices[0].message.content
             
             st.markdown(cevap)
