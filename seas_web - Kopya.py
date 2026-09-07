@@ -3,25 +3,15 @@ from groq import Groq
 from gtts import gTTS
 from io import BytesIO
 from streamlit_mic_recorder import mic_recorder
-import os
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="SEAS V2 - Final", layout="centered")
 
-# --- GITHUB SIZINTI KORUMASI ---
-if os.path.exists(".streamlit/secrets.toml"):
-    with open(".streamlit/secrets.toml", "r") as f:
-        content = f.read()
-        if "gsk_" in content and not os.path.exists(".gitignore"):
-            st.error("🚨 GÜVENLİK UYARISI: .gitignore dosyanız eksik! API anahtarınız GitHub'a sızabilir. Lütfen önce ana dizine bir .gitignore dosyası ekleyin ve içine `.streamlit/secrets.toml` yazın.")
-            st.stop()
-
-# API Bağlantısı (Gizli Arka Plan)
+# API Bağlantısı (Doğrudan GitHub Secrets'tan Okur)
 try:
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except Exception as e:
-    st.error(f"Sistem başlatılamadı: {e}. Lütfen yapılandırma dosyasını kontrol edin.")
-    st.stop()
+    st.error(f"Sistem başlatılamadı: {e}. Lütfen yapılandırmayı kontrol edin.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
